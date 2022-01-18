@@ -65,14 +65,14 @@ async def check_deleted_posts(reddit, subreddit_name):
     while True:
         
         # We only need to have this coroutine executed periodically, so we sleep for one minute. 
-        await asyncio.sleep(60) # Feel free to replace 60 with the number of seconds that work for you
+        await asyncio.sleep(300) # Feel free to replace the delay with the number of seconds that work for you
 
-        # Get list of 100 most recent posts we previously saved
+        # Get list of posts we previously saved
         try:
             recent_posts = [os.path.splitext(filename)[0] for filename in os.listdir(subreddit_name)]
             
             # Note: the current method for sorting the list by latest post relies on the post id name (also the filename). Hopefully this is reliable enough.
-            recent_posts = sorted(recent_posts, reverse=True)[:100]
+            recent_posts = sorted(recent_posts, reverse=True)
 
         except: # Could fail if no posts were saved, in which case we do nothing and retry
             continue
@@ -82,7 +82,7 @@ async def check_deleted_posts(reddit, subreddit_name):
             async for post in reddit.info(recent_posts):
 
                 # Check if any of the recent posts has been deleted
-                if post.selftext in ['[deleted]']: # Add other languages??
+                if post.removed_by_category == 'deleted':
                     print(f"Found deleted post: [r/{subreddit_name}]: [{post.fullname})]")
 
                     # Load original text from file
