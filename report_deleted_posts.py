@@ -17,7 +17,7 @@ import os
 async def save_posts(reddit, subreddit_name):
     print(f"Monitoring for new posts on [r/{subreddit_name}]")
     
-    # Create directory for stroing the posts of the monitored subreddit 
+    # Create directory for storing the posts of the monitored subreddit 
     if not os.path.exists(subreddit_name):
         os.makedirs(subreddit_name)
     
@@ -38,7 +38,7 @@ async def save_posts(reddit, subreddit_name):
                     'body': post.selftext
                 }
                 
-                # If a file named with the post id already exists, we don't want to overwrite!
+                # If a file named post_id already exists, we don't want to overwrite!
                 if not os.path.exists(file_name):
                     try:
                         print(f"Saving post: [r/{subreddit_name}]: [{post.fullname}]")
@@ -81,7 +81,7 @@ async def check_deleted_posts(reddit, subreddit_name):
         try:
             async for post in reddit.info(recent_posts):
 
-                # Check if any of the recent posts has been deleted
+                # Check if any of the recent posts have been deleted
                 if post.removed_by_category == 'deleted':
                     print(f"Found deleted post: [r/{subreddit_name}]: [{post.fullname})]")
 
