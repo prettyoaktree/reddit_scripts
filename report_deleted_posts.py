@@ -1,6 +1,6 @@
 """
 
-This script will monitors the specified subs for deleted posts.
+This script monitors the specified subs for deleted posts.
 If a deleted post is found, it will send modmail to the sub from which the post was deleted with details about the deleted post, 
 including the original text of the post.
 
