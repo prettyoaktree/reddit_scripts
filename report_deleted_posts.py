@@ -61,11 +61,11 @@ async def save_posts(reddit, subreddit_name):
 # Coroutine to check for deleted posts and notify mods #
 ########################################################
 async def check_deleted_posts(reddit, subreddit_name):
-    print(f"Checking for deleted posts on [r/{subreddit_name}]")
     while True:
         
-        # We only need to have this coroutine executed periodically, so we sleep for one minute. 
+        # We only need to have this coroutine executed periodically, so we sleep for a bit. 
         await asyncio.sleep(300) # Feel free to replace the delay with the number of seconds that work for you
+        print(f"Checking for deleted posts on [r/{subreddit_name}]")
 
         # Get list of posts we previously saved
         try:
