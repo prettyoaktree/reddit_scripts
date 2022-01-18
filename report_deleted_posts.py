@@ -9,7 +9,7 @@ async def save_posts(reddit, subreddit_name):
     
     # Create directory for stroing the posts of the monitored subreddit 
     if not os.path.exists(subreddit_name):
-      os.makedirs(subreddit_name)
+        os.makedirs(subreddit_name)
     
     # Save each post to the directory so that we can retrieve the text later if the post is deleted
     try:
