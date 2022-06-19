@@ -3,4 +3,5 @@ reddit-scripts.code-workspace
 orangetheorytesting/
 modguide/
 .vscode/
-venv
+venv/
+plugin_test.py

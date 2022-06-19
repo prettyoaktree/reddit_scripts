@@ -14,14 +14,21 @@ import os
 #################################################################
 # Coroutine to record every post submitted to the specified sub #
 #################################################################
-async def save_posts(reddit, subreddit_name):
+async def save_posts(subreddit_name):
     print(f"Monitoring for new posts on [r/{subreddit_name}]")
     
     # Create directory for storing the posts of the monitored subreddit 
     if not os.path.exists(subreddit_name):
         os.makedirs(subreddit_name)
     
-    while True:
+    # Initialize the asyncpraw Reddit instance
+    with asyncpraw.Reddit(
+        client_id=REDDIT_CLIENT_ID,
+        client_secret=REDDIT_CLIENT_SECRET,
+        user_agent=REDDIT_USER_AGENT,
+        username=REDDIT_USERNAME,
+        password=REDDIT_PASSWORD
+    ) as reddit:
 
         try:
             
@@ -60,11 +67,11 @@ async def save_posts(reddit, subreddit_name):
 ########################################################
 # Coroutine to check for deleted posts and notify mods #
 ########################################################
-async def check_deleted_posts(reddit, subreddit_name):
+async def check_deleted_posts(subreddit_name):
     while True:
         
         # We only need to have this coroutine executed periodically, so we sleep for a bit. 
-        await asyncio.sleep(300) # Feel free to replace the delay with the number of seconds that work for you
+        await asyncio.sleep(10) # Feel free to replace the delay with the number of seconds that work for you
         print(f"Checking for deleted posts on [r/{subreddit_name}]")
 
         # Get list of posts we previously saved
@@ -78,59 +85,67 @@ async def check_deleted_posts(reddit, subreddit_name):
             continue
         
         # Get info on recent posts       
-        try:
-            async for post in reddit.info(recent_posts):
+        # Initialize the asyncpraw Reddit instance
+        with asyncpraw.Reddit(
+            client_id=REDDIT_CLIENT_ID,
+            client_secret=REDDIT_CLIENT_SECRET,
+            user_agent=REDDIT_USER_AGENT,
+            username=REDDIT_USERNAME,
+            password=REDDIT_PASSWORD
+        ) as reddit:
+            try:
+                async for post in reddit.info(recent_posts):
 
-                # Check if any of the recent posts have been deleted
-                if post.removed_by_category == 'deleted':
-                    print(f"Found deleted post: [r/{subreddit_name}]: [{post.fullname})]")
+                    # Check if any of the recent posts have been deleted
+                    if post.removed_by_category == 'deleted':
+                        print(f"Found deleted post: [r/{subreddit_name}]: [{post.fullname})]")
 
-                    # Load original text from file
-                    payload = {}
-                    file_name = f"{subreddit_name}/{post.fullname}.json"
-                    try:
-                        with open(file_name, 'r') as json_file:
-                            payload = json.load(json_file)
-                    except:
-                        
-                        # Skip if error
-                        print(f"Error loading file: [{file_name}]. Skipping notification.")
-                        continue
-
-                    # Check if we already notified about this post
-                    if payload.get('notified') is None:
-                            
-                        # Send modmail to the subreddit
-                        modmail_subject = f"Deleted Post Notification for r/{subreddit_name}"
-                        modmail_message = (
-                            f"**Title:** {payload['title']}\n\n  "
-                            f"**Author:** {payload['author']}\n\n  "
-                            f"**Link:** https://reddit.com{payload['permalink']}\n\n  "
-                            f"**Original Text:** {payload['body']}"
-                        )
+                        # Load original text from file
+                        payload = {}
+                        file_name = f"{subreddit_name}/{post.fullname}.json"
                         try:
-                            print(f"Sending modmail notification to [r/{subreddit_name}]")
-                            subreddit = await(reddit.subreddit(subreddit_name))
-                            await subreddit.message(modmail_subject, modmail_message)
-                        
+                            with open(file_name, 'r') as json_file:
+                                payload = json.load(json_file)
                         except:
-                            print('Error sending modmail notification')
+                            
+                            # Skip if error
+                            print(f"Error loading file: [{file_name}]. Skipping notification.")
                             continue
 
-                        # Update the file to make sure we do not resend the notification
-                        payload['notified'] = True
-                        try:
-                            with open(file_name, 'w') as json_file:
-                                json.dump(payload, json_file)
-                        except:
-                            print(f"Error updating file: [{file_name}]")
-                    
-                    else:
-                        # If we already notified about the file, no need to send modmail again
-                        print(f"Already notified about post: [r/{subreddit_name}]: [{post.fullname}]")
-          
-        except Exception as e:
-            print(str(e))
+                        # Check if we already notified about this post
+                        if payload.get('notified') is None:
+                                
+                            # Send modmail to the subreddit
+                            modmail_subject = f"Deleted Post Notification for r/{subreddit_name}"
+                            modmail_message = (
+                                f"**Title:** {payload['title']}\n\n  "
+                                f"**Author:** {payload['author']}\n\n  "
+                                f"**Link:** https://reddit.com{payload['permalink']}\n\n  "
+                                f"**Original Text:** {payload['body']}"
+                            )
+                            try:
+                                print(f"Sending modmail notification to [r/{subreddit_name}]")
+                                subreddit = await(reddit.subreddit(subreddit_name))
+                                await subreddit.message(modmail_subject, modmail_message)
+                            
+                            except:
+                                print('Error sending modmail notification')
+                                continue
+
+                            # Update the file to make sure we do not resend the notification
+                            payload['notified'] = True
+                            try:
+                                with open(file_name, 'w') as json_file:
+                                    json.dump(payload, json_file)
+                            except:
+                                print(f"Error updating file: [{file_name}]")
+                        
+                        else:
+                            # If we already notified about the file, no need to send modmail again
+                            print(f"Already notified about post: [r/{subreddit_name}]: [{post.fullname}]")
+            
+            except Exception as e:
+                print(str(e))
 
 
 ###################
@@ -142,8 +157,8 @@ async def main():
     # For each specified subreddit, create tasks for saving posts and checking for deleted posts
     tasks = []
     for subreddit in SUBREDDITS:
-        tasks.append(save_posts(reddit, subreddit))
-        tasks.append(check_deleted_posts(reddit, subreddit))
+        tasks.append(save_posts(subreddit))
+        tasks.append(check_deleted_posts(subreddit))
 
     # Run all the tasks and hope for the best
     await asyncio.gather(*tasks)
@@ -165,16 +180,6 @@ REDDIT_USER_AGENT = local_config['reddit_user_agent']
 REDDIT_USERNAME = local_config['reddit_username'],
 REDDIT_PASSWORD = local_config['reddit_password']
 
-# Initialize the asyncpraw Reddit instance
-reddit = asyncpraw.Reddit(
-    client_id=REDDIT_CLIENT_ID,
-    client_secret=REDDIT_CLIENT_SECRET,
-    user_agent=REDDIT_USER_AGENT,
-    username=REDDIT_USERNAME,
-    password=REDDIT_PASSWORD
-)
-
 # Initialize the event loop
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    asyncio.run(main()) 
