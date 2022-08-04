@@ -10,6 +10,7 @@ import asyncpraw
 import json
 import asyncio
 import os
+import sys
 
 #################################################################
 # Coroutine to record every post submitted to the specified sub #
@@ -68,84 +69,84 @@ async def save_posts(subreddit_name):
 # Coroutine to check for deleted posts and notify mods #
 ########################################################
 async def check_deleted_posts(subreddit_name):
-    while True:
-        
-        # We only need to have this coroutine executed periodically, so we sleep for a bit. 
-        await asyncio.sleep(10) # Feel free to replace the delay with the number of seconds that work for you
-        print(f"Checking for deleted posts on [r/{subreddit_name}]")
+    
+    # We only need to have this coroutine executed periodically, so we sleep for a bit. 
+    await asyncio.sleep(10) # Feel free to replace the delay with the number of seconds that work for you
 
-        # Get list of posts we previously saved
+    print(f"Checking for deleted posts on [r/{subreddit_name}]")
+
+    # Get list of posts we previously saved
+    try:
+        recent_posts = [os.path.splitext(filename)[0] for filename in os.listdir(subreddit_name)]
+        
+        # Note: the current method for sorting the list by latest post relies on the post id name (also the filename). Hopefully this is reliable enough.
+        recent_posts = sorted(recent_posts, reverse=True)
+
+    except Exception as e: # Could fail if no posts were saved, in which case we will just print the exception
+        print(str(e))
+    
+    # Get info on recent posts       
+    # Initialize the asyncpraw Reddit instance
+    with asyncpraw.Reddit(
+        client_id=REDDIT_CLIENT_ID,
+        client_secret=REDDIT_CLIENT_SECRET,
+        user_agent=REDDIT_USER_AGENT,
+        username=REDDIT_USERNAME,
+        password=REDDIT_PASSWORD
+    ) as reddit:
         try:
-            recent_posts = [os.path.splitext(filename)[0] for filename in os.listdir(subreddit_name)]
-            
-            # Note: the current method for sorting the list by latest post relies on the post id name (also the filename). Hopefully this is reliable enough.
-            recent_posts = sorted(recent_posts, reverse=True)
+            async for post in reddit.info(recent_posts):
 
-        except: # Could fail if no posts were saved, in which case we do nothing and retry
-            continue
-        
-        # Get info on recent posts       
-        # Initialize the asyncpraw Reddit instance
-        with asyncpraw.Reddit(
-            client_id=REDDIT_CLIENT_ID,
-            client_secret=REDDIT_CLIENT_SECRET,
-            user_agent=REDDIT_USER_AGENT,
-            username=REDDIT_USERNAME,
-            password=REDDIT_PASSWORD
-        ) as reddit:
-            try:
-                async for post in reddit.info(recent_posts):
+                # Check if any of the recent posts have been deleted
+                if post.removed_by_category == 'deleted':
+                    print(f"Found deleted post: [r/{subreddit_name}]: [{post.fullname})]")
 
-                    # Check if any of the recent posts have been deleted
-                    if post.removed_by_category == 'deleted':
-                        print(f"Found deleted post: [r/{subreddit_name}]: [{post.fullname})]")
+                    # Load original text from file
+                    payload = {}
+                    file_name = f"{subreddit_name}/{post.fullname}.json"
+                    try:
+                        with open(file_name, 'r') as json_file:
+                            payload = json.load(json_file)
+                    except:
+                        
+                        # Skip if error
+                        print(f"Error loading file: [{file_name}]. Skipping notification.")
+                        continue
 
-                        # Load original text from file
-                        payload = {}
-                        file_name = f"{subreddit_name}/{post.fullname}.json"
-                        try:
-                            with open(file_name, 'r') as json_file:
-                                payload = json.load(json_file)
-                        except:
+                    # Check if we already notified about this post
+                    if payload.get('notified') is None:
                             
-                            # Skip if error
-                            print(f"Error loading file: [{file_name}]. Skipping notification.")
+                        # Send modmail to the subreddit
+                        modmail_subject = f"Deleted Post Notification for r/{subreddit_name}"
+                        modmail_message = (
+                            f"**Title:** {payload['title']}\n\n  "
+                            f"**Author:** {payload['author']}\n\n  "
+                            f"**Link:** https://reddit.com{payload['permalink']}\n\n  "
+                            f"**Original Text:** {payload['body']}"
+                        )
+                        try:
+                            print(f"Sending modmail notification to [r/{subreddit_name}]")
+                            subreddit = await(reddit.subreddit(subreddit_name))
+                            await subreddit.message(modmail_subject, modmail_message)
+                        
+                        except:
+                            print('Error sending modmail notification')
                             continue
 
-                        # Check if we already notified about this post
-                        if payload.get('notified') is None:
-                                
-                            # Send modmail to the subreddit
-                            modmail_subject = f"Deleted Post Notification for r/{subreddit_name}"
-                            modmail_message = (
-                                f"**Title:** {payload['title']}\n\n  "
-                                f"**Author:** {payload['author']}\n\n  "
-                                f"**Link:** https://reddit.com{payload['permalink']}\n\n  "
-                                f"**Original Text:** {payload['body']}"
-                            )
-                            try:
-                                print(f"Sending modmail notification to [r/{subreddit_name}]")
-                                subreddit = await(reddit.subreddit(subreddit_name))
-                                await subreddit.message(modmail_subject, modmail_message)
-                            
-                            except:
-                                print('Error sending modmail notification')
-                                continue
-
-                            # Update the file to make sure we do not resend the notification
-                            payload['notified'] = True
-                            try:
-                                with open(file_name, 'w') as json_file:
-                                    json.dump(payload, json_file)
-                            except:
-                                print(f"Error updating file: [{file_name}]")
-                        
-                        else:
-                            # If we already notified about the file, no need to send modmail again
-                            print(f"Already notified about post: [r/{subreddit_name}]: [{post.fullname}]")
-            
-            except Exception as e:
-                print(str(e))
+                        # Update the file to make sure we do not resend the notification
+                        payload['notified'] = True
+                        try:
+                            with open(file_name, 'w') as json_file:
+                                json.dump(payload, json_file)
+                        except:
+                            print(f"Error updating file: [{file_name}]")
+                    
+                    else:
+                        # If we already notified about the file, no need to send modmail again
+                        print(f"Already notified about post: [r/{subreddit_name}]: [{post.fullname}]")
+        
+        except Exception as e:
+            print(str(e))
 
 
 ###################
@@ -182,4 +183,14 @@ REDDIT_PASSWORD = local_config['reddit_password']
 
 # Initialize the event loop
 if __name__ == "__main__":
-    asyncio.run(main()) 
+
+    while True:
+        try:
+            asyncio.run(main())
+        except KeyboardInterrupt:
+            print('Received CTRL-C. Exiting.')
+            sys.exit()
+        except SystemExit:
+            print('Someone said to terminate so here I go.')
+            sys.exit()
+
