@@ -1,7 +1,5 @@
-local_config.json
-reddit-scripts.code-workspace
-orangetheorytesting/
-modguide/
-.vscode/
-venv/
-plugin_test.py
+*.json
+*.code-workspace
+*_test.py
+tokens
+/*/
