@@ -1,10 +1,26 @@
+############################################
+# Moderation Transparency Report Generator #
+############################################
+"""
+This is the code I use to generate the mod transparency reports for r/Orangetheory.
+Examples for these reports can be found here: https://www.reddit.com/r/orangetheory/wiki/mod-transparency-reports/
+The code also updates a wiki page with links to posted reports.
+
+Please note: this has not been thoroughly tested with other subs and it's possible there are lots of bugs here!
+"""
+
 import json
 from datetime import datetime, tzinfo
 from dateutil.tz import tzutc
 import pandas as pd
 import praw
 
-# Retrieve settings and secrets
+"""
+Retrieve settings and secrets
+This code assumes that all the secrets are in a json file located in the same directory as this script.
+You can just enter these secrets here, but keep in mind that they are called "secrets" for a reason.
+Make sure your bot user can manage / edit wiki pages if you want to archive these reports on your sub's wiki
+"""
 CONFIG_FILE='local_config.json'
 with open(CONFIG_FILE) as config_file:
     config = json.load(config_file)
@@ -15,9 +31,9 @@ reddit_user_agent = config['reddit_user_agent']
 reddit_client_id = config['reddit_client_id']
 reddit_client_secret = config['reddit_client_secret']
 
-# Enter the range of blob datetime to retrieve
-earliest_dt = datetime(2022, 7, 1, tzinfo=tzutc()) 
-latest_dt = datetime(2022, 7, 31, tzinfo=tzutc())
+# Enter the range of modlog data to retrieve
+earliest_dt = datetime(year=2022, month=7, day=1, tzinfo=tzutc()) 
+latest_dt = datetime(year=2022, month=7, day=31, tzinfo=tzutc())
 
 # Generate Reddit post text in markdown format
 post_title = f"Moderation Transparency Report for {latest_dt.strftime('%B %Y')}"
@@ -37,21 +53,26 @@ with praw.Reddit(
     for item in reddit.subreddit(monitored_subreddit).mod.log(limit=None):
         item_created_dt = datetime.fromtimestamp(item.created_utc, tz=tzutc())
         if earliest_dt <= item_created_dt <= latest_dt:
-            item_dict = report_data.get(item.target_fullname, {})
+            
+            """
+            The logic here is a little convoluted because I wanted the report to only consider "items" as opposed to "mod actions"
+            For example: if a mod removed a post, added a removal reason, then changed their mind and approved the post, I only want
+            the report to consider the item as approved.
+            """
+            target_item_dict = report_data.get(item.target_fullname, {})
             if item.action == 'addremovalreason':
-                item_dict['removal_reason'] = item.description
-                report_data[item.target_fullname] = item_dict
+                target_item_dict['removal_reason'] = item.description
+                report_data[item.target_fullname] = target_item_dict
             elif item.action in ['approvelink', 'approvecomment', 'removelink', 'removecomment']:
-                if item_dict.get('type') is None:
-                    item_dict['type'] = 'comment' if item.target_fullname.split('_')[0] == 't1' else 'post'
-                    item_dict['mod_action'] = 'approve' if item.action.startswith('approve') else 'remove'
-                    item_dict['date_time'] = item_created_dt.strftime('%Y/%m/%d')       
-                    report_data[item.target_fullname] = item_dict
+                if target_item_dict.get('type') is None:
+                    target_item_dict['type'] = 'comment' if item.target_fullname.split('_')[0] == 't1' else 'post'
+                    target_item_dict['mod_action'] = 'approve' if item.action.startswith('approve') else 'remove'
+                    target_item_dict['date_time'] = item_created_dt.strftime('%Y/%m/%d')       
+                    report_data[item.target_fullname] = target_item_dict
         
 # Get results as DataFrame
 print('Creating report...')
 df_report = pd.DataFrame(report_data).transpose()
-# df_report.to_csv(f"modlog_data_{earliest_dt.year}-{earliest_dt.month}.csv")
 
 # Summarize mod action data
 summary_data = pd.pivot_table(
@@ -127,10 +148,6 @@ if len(bans) > 0:
         '## Bans\n'
         f"A total of **{len(bans)}** bans were issued by the moderators. The table below breaks them down by reason and duration:  \n\n" 
     )
-    """
-    for ban_reason, count in bans_summary_data['timestamp'].sort_values(ascending=False).items():
-        post_body_md += f"- {ban_reason}: **{count}** ({int(round(count / len(bans) * 100, 0))}%)  \n"
-    """
     post_body_md += bans_summary_data.to_markdown() 
 
 
